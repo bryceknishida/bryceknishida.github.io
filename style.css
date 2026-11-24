@@ -1,0 +1,150 @@
+/* Scroll film. One fixed stage; the scroll position drives a single timeline (main.js) that moves the camera,
+   the characters, the footage and every block of text. Nothing here animates on its own except hover states. */
+html, body { margin: 0; background: #0c2b2a; }
+html { overflow-x: clip; scrollbar-width: none; }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+html::-webkit-scrollbar { display: none; }
+:root { --fg: #ffffff; --accent: #5ff0d2; --ink: #06201f; }
+* { box-sizing: border-box; }
+body { transition: color 500ms; font-family: Poppins, system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--fg); -webkit-font-smoothing: antialiased; overflow-x: clip; }
+::selection { background: rgba(255, 255, 255, 0.3); }
+a { color: inherit; }
+
+html.plain .k { position: static !important; opacity: 1 !important; visibility: visible !important; transform: none !important; margin: 8vh 6vw !important; width: auto !important; max-width: 40em; }
+html.plain .stamp { font-size: 64px !important; }
+html.plain .hud { position: relative !important; }
+html.plain .stage, html.plain .track, html.plain .progress { display: none !important; }
+
+/* ------------------------------------------------------------ stage layers */
+.stage { position: fixed; inset: 0; overflow: hidden; pointer-events: none; }
+/* The opening backdrop: a soft pool of teal light behind Sage on the dark page. */
+.tint { position: absolute; inset: 0; background: radial-gradient(90% 70% at 50% 62%, #12615a, rgba(12, 43, 42, 0) 70%); }
+.word { position: absolute; left: 50%; top: 46%; white-space: nowrap; font-weight: 800; line-height: 0.8; letter-spacing: -0.05em; font-size: 30vw; color: #fff; opacity: 0; will-change: transform; }
+#w-np { font-size: 15.5vw; } #w-gg { top: 76%; font-size: 26vw; color: transparent; -webkit-text-stroke: 2px rgba(255, 255, 255, 0.42); }
+/* Over footage the word is drawn as an outline, so the white text in front of it stays readable. */
+#w-riscei { color: transparent; -webkit-text-stroke: 2px rgba(255, 255, 255, 0.5); }
+.sage { position: absolute; left: 50%; bottom: 0; height: min(88vh, 96vw); width: auto; will-change: transform;
+  -webkit-mask-image: linear-gradient(#000 84%, transparent); mask-image: linear-gradient(#000 84%, transparent);
+  filter: drop-shadow(0 30px 50px rgba(0, 20, 20, 0.5)); }
+/* Each round's colour arrives as its own wipe: a slanted edge from the right, a slanted rise from below, then a circle opening. */
+.wipe { position: absolute; inset: 0; --w: 0; }
+#wipe-b { background: #f4cf63; clip-path: polygon(calc(130% - var(--w) * 160%) 0, 100% 0, 100% 100%, calc(100% - var(--w) * 160%) 100%); }
+#wipe-n { background: #b9e3d6; clip-path: polygon(0 calc(130% - var(--w) * 160%), 100% calc(100% - var(--w) * 160%), 100% 100%, 0 100%); }
+#wipe-e { background: radial-gradient(120% 90% at 50% 70%, #0f4a47, #071a24 62%); clip-path: circle(calc(var(--w) * 150%) at 50% 64%); }
+#gl, #fx { position: absolute; inset: 0; width: 100%; height: 100%; }
+/* A soft light that follows the pointer. Desktop only. */
+.glow { position: fixed; z-index: 5; left: 0; top: 0; width: 560px; height: 560px; margin: -280px 0 0 -280px; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(closest-side, rgba(255, 255, 255, 0.2), transparent); mix-blend-mode: soft-light; opacity: 0; }
+@media (hover: none) { .glow { display: none; } }
+html.no3d #gl { display: none; }
+
+/* ------------------------------------------------------------ nav and progress */
+.nav { position: fixed; z-index: 20; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; padding: 18px clamp(18px, 4vw, 52px); color: var(--fg); transition: color 500ms; }
+.nav a { text-decoration: none; font-weight: 600; font-size: 14px; letter-spacing: 0.02em; }
+.logo { font-weight: 800 !important; font-size: 18px !important; letter-spacing: -0.02em !important; }
+.nav nav { display: flex; gap: clamp(14px, 2.4vw, 34px); }
+.nav nav a { padding: 8px 0; opacity: 0.85; } .nav nav a:hover { opacity: 1; }
+.progress { position: fixed; z-index: 20; left: 0; right: 0; bottom: 0; height: 3px; }
+.progress i { display: block; height: 100%; width: 100%; background: var(--fg); transition: background-color 500ms; transform-origin: left; transform: scaleX(0); }
+
+/* ------------------------------------------------------------ text blocks: fixed, placed by region, moved by the timeline */
+.hud { position: fixed; inset: 0; z-index: 10; pointer-events: none; }
+.k { position: absolute; margin: 0; opacity: 0; will-change: transform, opacity; }
+.k a { pointer-events: auto; }
+.k.tl { left: clamp(18px, 4vw, 52px); top: 15vh; max-width: min(30em, 80vw); }
+.k.left { left: clamp(18px, 5vw, 76px); top: 50%; width: min(31vw, 460px); }
+.k.mid { left: 50%; top: 13vh; width: min(760px, 90vw); text-align: center; }
+.round { margin: 0 0 14px; font-weight: 600; font-size: 12.5px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); }
+h1 { margin: 0; font-weight: 800; font-size: clamp(34px, 4.6vw, 64px); line-height: 0.98; letter-spacing: -0.04em; }
+h2 { margin: 0; font-weight: 800; font-size: clamp(34px, 4.4vw, 68px); line-height: 0.98; letter-spacing: -0.04em; text-wrap: balance; }
+.k.mid h2 { font-size: clamp(40px, 6.4vw, 96px); }
+.say { margin: 18px 0 0; font-weight: 500; font-size: clamp(15px, 1.25vw, 19px); line-height: 1.5; max-width: 25em; text-wrap: pretty; }
+.k.mid .say { margin-inline: auto; }
+.cue { margin: 34px 0 0; font-weight: 600; font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase; opacity: 0.8; }
+.cue::after { content: ""; display: inline-block; width: 44px; height: 1px; margin-left: 14px; vertical-align: middle; background: currentColor; }
+/* The one number that matters most, as large as the screen allows. Its label is the card row around it. */
+.stamp { left: 50%; top: 44%; font-weight: 800; font-size: clamp(120px, 30vw, 460px); line-height: 0.8; letter-spacing: -0.06em; color: #fff; text-shadow: 0 10px 80px rgba(0, 0, 0, 0.45); white-space: nowrap; }
+
+/* A stat is a small frosted card. The four slots sit round the hero so each can arrive from its own side. */
+.stat { padding: 16px 22px 15px; border-radius: 22px; background: rgba(6, 26, 25, 0.5); border: 1px solid rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(18px) saturate(1.5); -webkit-backdrop-filter: blur(18px) saturate(1.5); box-shadow: 0 18px 50px rgba(0, 0, 0, 0.2); }
+.stat b { display: block; font-weight: 800; font-size: clamp(34px, 4.4vw, 68px); line-height: 0.95; letter-spacing: -0.045em; font-variant-numeric: tabular-nums; }
+.stat span { display: block; margin-top: 8px; font-weight: 600; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.9; white-space: nowrap; }
+/* Centring offsets and the cards' resting tilt are set in main.js: GSAP owns these elements' transforms. */
+.s1 { left: 6vw; top: 22vh; } .s2 { left: 9vw; bottom: 17vh; }
+.s3 { right: 6vw; top: 26vh; } .s4 { right: 9vw; bottom: 19vh; }
+/* The scoreboard: my true top clips, ranked by views, in the shape of an end-of-round table. */
+.board { left: 50%; top: 46%; width: min(820px, 92vw); padding: 22px 26px 10px; border-radius: 24px; background: rgba(6, 26, 25, 0.62); border: 1px solid rgba(255, 255, 255, 0.22);
+  backdrop-filter: blur(20px) saturate(1.4); -webkit-backdrop-filter: blur(20px) saturate(1.4); box-shadow: 0 30px 90px rgba(0, 0, 0, 0.4); }
+.board ol { list-style: none; margin: 0; padding: 0; }
+.board a { display: grid; grid-template-columns: 2.2em 1fr auto 7.2em; gap: 14px; align-items: baseline; padding: 13px 4px; text-decoration: none; border-top: 1px solid rgba(255, 255, 255, 0.14); pointer-events: auto; }
+.board i { font-style: normal; font-weight: 800; font-size: 15px; color: var(--accent); font-variant-numeric: tabular-nums; }
+.board span { font-weight: 600; font-size: clamp(15px, 1.35vw, 19px); line-height: 1.25; }
+.board b { font-weight: 800; font-size: clamp(22px, 2.2vw, 32px); letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.board em { font-style: normal; font-weight: 500; font-size: 13px; opacity: 0.8; text-align: right; white-space: nowrap; }
+.board a:hover span, .board a:focus-visible span { color: var(--accent); }
+.cap { left: 50%; top: calc(44% + min(15vw, 230px)); font-weight: 600; font-size: clamp(12px, 1.1vw, 16px); letter-spacing: 0.26em; text-transform: uppercase; white-space: nowrap; }
+.cta { left: 50%; bottom: 7vh; }
+.btn { display: inline-block; white-space: nowrap; padding: 15px 28px; border-radius: 999px; background: #fff; color: var(--ink); border: 1.5px solid #fff; font-weight: 700; font-size: 14px; letter-spacing: 0.14em; text-transform: uppercase; text-decoration: none; transition: transform 220ms cubic-bezier(0.22, 0.8, 0.3, 1), background-color 220ms; }
+.btn.ghost { background: transparent; color: inherit; border-color: currentColor; }
+.btn:hover { transform: translateY(-3px); } .btn:active { transform: scale(0.97); }
+.btn:focus-visible, .nav a:focus-visible { outline: 2px solid currentColor; outline-offset: 4px; }
+.links { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin: 30px 0 0; }
+/* Why hire me: four claims, each with the number that proves it. */
+.why { list-style: none; margin: 30px 0 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; text-align: left; }
+.why li { display: grid; grid-template-columns: auto 1fr; gap: 2px 16px; align-items: center; padding: 16px 20px; border-radius: 20px; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.2); }
+.why b { grid-row: span 2; min-width: 3.1em; font-weight: 800; font-size: clamp(24px, 2.5vw, 38px); letter-spacing: -0.04em; color: var(--accent); font-variant-numeric: tabular-nums; }
+.why strong { font-weight: 700; font-size: clamp(15px, 1.25vw, 18px); line-height: 1.25; }
+.why span { font-weight: 500; font-size: 13.5px; line-height: 1.4; opacity: 0.86; }
+.chips { list-style: none; margin: 24px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.chips li { padding: 9px 16px; border-radius: 999px; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.24); font-weight: 600; font-size: 14px; }
+.chips.quiet { margin-top: 12px; } .chips.quiet li { background: transparent; border-style: dashed; font-weight: 500; opacity: 0.88; }
+/* The legal notice lives behind a small button, so the ending stays clean. */
+.credits { margin: 22px auto 0; max-width: 34em; pointer-events: auto; }
+.credits summary { display: inline-block; list-style: none; cursor: pointer; padding: 8px 16px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.3); font-weight: 600; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.8; }
+.credits summary::-webkit-details-marker { display: none; }
+.credits summary:hover, .credits[open] summary { opacity: 1; }
+.credits summary:focus-visible { outline: 2px solid currentColor; outline-offset: 4px; }
+.credits p { margin: 12px 0 0; padding: 14px 18px; border-radius: 16px; background: rgba(4, 20, 26, 0.92); border: 1px solid rgba(255, 255, 255, 0.18); font-size: 12px; line-height: 1.6; font-weight: 500; }
+/* On the light rounds the text goes dark; main.js flips this class with the page colour. */
+body.light { --fg: #1d1512; --accent: #7a3f00; }
+body.light .stat { background: rgba(255, 255, 255, 0.42); border-color: rgba(255, 255, 255, 0.75); box-shadow: 0 18px 50px rgba(80, 50, 0, 0.14); }
+body.light .btn { background: #1d1512; color: #fff; border-color: #1d1512; } body.light .btn.ghost { background: transparent; color: #1d1512; }
+
+.track { position: relative; height: 1340vh; pointer-events: none; }
+.track i { position: absolute; left: 0; width: 1px; height: 1px; }
+
+/* ------------------------------------------------------------ phones: text goes top and bottom, the hero keeps the middle */
+@media (max-width: 820px), (orientation: portrait) {
+  .nav { padding: 10px 16px; } .nav nav { width: 100%; justify-content: space-between; gap: 8px; } .nav a { font-size: 13px; white-space: nowrap; } .logo { display: none; }
+  .k.tl { top: 11vh; left: 18px; }
+  .k.left { left: 18px; right: 18px; top: 10vh; width: auto; }
+  .k.mid { top: 9vh; }
+  h2 { font-size: clamp(30px, 9vw, 46px); } .k.mid h2 { font-size: clamp(36px, 11vw, 58px); }
+  .say { font-size: 15px; margin-top: 12px; }
+  .word { font-size: 34vw; top: 50%; } #w-np { font-size: 17vw; } #w-gg { top: 80%; font-size: 33vw; }
+  .sage { height: min(64vh, 118vw); }
+  .stat { padding: 11px 15px 10px; border-radius: 16px; backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(12, 43, 42, 0.72); }
+  body.light .stat { background: rgba(255, 255, 255, 0.82); }
+  .stat { max-width: 46vw; } .stat b { font-size: 28px; } .stat span { font-size: 11px; letter-spacing: 0.06em; white-space: normal; line-height: 1.25; }
+  /* On a phone the cards line up under the nav in two rows, so they never sit on the character. */
+  .s1 { left: 12px; top: max(9vh, 62px); bottom: auto; } .s3 { right: 12px; top: max(9vh, 62px); bottom: auto; }
+  .s2 { left: 12px; top: calc(max(9vh, 62px) + 88px); bottom: auto; } .s4 { right: 12px; top: calc(max(9vh, 62px) + 88px); bottom: auto; }
+  .stamp { top: 52%; } .cap { top: calc(52% + 15vw); }
+  .nav nav a { padding: 12px 2px; }
+  .cta { bottom: 8vh; } .btn { padding: 13px 22px; font-size: 12.5px; }
+  .board { top: 45%; padding: 16px 16px 6px; border-radius: 18px; backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(6, 26, 25, 0.9); }
+  .board a { grid-template-columns: 1.4em 1fr auto; gap: 10px; padding: 11px 2px; } .board em { display: none; } .board span { font-size: 14px; } .board b { font-size: 20px; }
+  .why { grid-template-columns: 1fr; gap: 8px; margin-top: 18px; } .why li { padding: 11px 14px; border-radius: 16px; gap: 1px 12px; } .why b { font-size: 22px; min-width: 2.9em; } .why strong { font-size: 14.5px; } .why span { font-size: 12.5px; }
+  .chips { margin-top: 16px; gap: 6px; } .chips li { padding: 7px 12px; font-size: 12.5px; }
+  .links { margin-top: 20px; gap: 8px; }
+}
+
+/* Short, wide screens (a phone on its side): keep the text clear of the nav and drop the side cards lower. */
+@media (max-height: 480px) {
+  .k.left, .k.tl { top: max(12vh, 60px); } .k.mid { top: max(10vh, 54px); }
+  h2 { font-size: clamp(24px, 6vh, 40px); } .say { font-size: 14px; margin-top: 8px; } .why span, .chips.quiet { display: none; }
+  .cta { bottom: 4vh; } .stat b { font-size: 26px; }
+}
+
+@media (prefers-reduced-motion: reduce) { .btn { transition: none; } }
